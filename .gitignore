@@ -1,0 +1,52 @@
+# ## Pliki generowane przez system operacyjny ##
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ## Pliki i foldery generowane przez IDE (JetBrains Rider / Visual Studio) ##
+# Pliki użytkownika, które przechowują ustawienia lokalne (np. otwarte pliki, breakpointy)
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Folder z ustawieniami Ridera
+.idea/
+
+# ## Pliki i foldery generowane przez kompilację .NET ##
+# Foldery wyjściowe kompilacji
+bin/
+obj/
+
+# Pliki generowane przez NuGet i zarządzanie pakietami
+*.nuget.props
+*.nuget.targets
+packages/
+project.lock.json
+
+# Cache i artefakty kompilacji
+.vs/
+.vscode/
+
+# ## Pliki związane z testami i pokryciem kodu ##
+*.DotSettings.user
+TestResults/
+*.coverage
+*.coveragereport
+
+# ## Pliki związane z publikacją ##
+publish/
+*.pubxml
+*.pubxml.user
+
+# ## Pliki konfiguracyjne ze zmiennymi środowiskowymi ##
+appsettings.Development.json
+secrets.json
+
+# ## Inne ##
+# Pliki logów
+*.log
+*.txt
+
+# Pliki tymczasowe
+*.tmp
