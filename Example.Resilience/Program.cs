@@ -1,69 +1,89 @@
 using Example.Shared;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
-builder.Services
-    .AddHttpClient<SomeServiceClient>()
-    .AddResilienceHandler("DefaultPipeline", pipelineBuilder =>
-    {
-        pipelineBuilder.AddCircuitBreaker<HttpResponseMessage>(new HttpCircuitBreakerStrategyOptions
-        {
-            MinimumThroughput = 3,
-            FailureRatio = 0.99,
-            SamplingDuration = TimeSpan.FromMinutes(5),
-            BreakDuration = TimeSpan.FromMinutes(1),
-            OnOpened = onOpenedArguments =>
-            {
-                Console.WriteLine($"Breaking the circuit resiliently for: {onOpenedArguments.BreakDuration.ToString()}");
-                return ValueTask.CompletedTask;
-            },
-            OnHalfOpened = onHalfOpenedArguments =>
-            {
-                Console.WriteLine("Resilient circuit in a half-open state, next call is a try...");
-                return ValueTask.CompletedTask;
-            },
-            OnClosed = onClosedArguments =>
-            {
-                Console.WriteLine("Resilient circuit reset");
-                return ValueTask.CompletedTask;
-            }
-        });
-        
-        pipelineBuilder.AddRetry<HttpResponseMessage>(new HttpRetryStrategyOptions
-        {
-            MaxRetryAttempts = 3,
-            BackoffType = DelayBackoffType.Exponential,
-            Delay = TimeSpan.FromSeconds(2),
-            OnRetry = onRetryArguments =>
-            {
-                Console.WriteLine($"Retry number: {onRetryArguments.AttemptNumber}");
-                return ValueTask.CompletedTask;
-            }
-        });
-        
-        pipelineBuilder.AddTimeout(TimeSpan.FromSeconds(5));
-    });
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+try
 {
-    app.MapOpenApi();
-}
+    var builder = WebApplication.CreateBuilder(args);
 
-app.UseHttpsRedirection();
+    builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .WriteTo.Console());
 
-app.MapGet("resilience/users", async (SomeServiceClient client) =>
+    builder.Services.AddOpenApi();
+    builder.Services
+        .AddHttpClient<SomeServiceClient>()
+        .AddResilienceHandler("DefaultPipeline", pipelineBuilder =>
+        {
+            pipelineBuilder.AddCircuitBreaker<HttpResponseMessage>(new HttpCircuitBreakerStrategyOptions
+            {
+                MinimumThroughput = 3,
+                FailureRatio = 0.75,
+                SamplingDuration = TimeSpan.FromMinutes(5),
+                BreakDuration = TimeSpan.FromMinutes(1),
+                OnOpened = onOpenedArguments =>
+                {
+                    Log.Warning(
+                        "Breaking the circuit for: {BreakDuration}", onOpenedArguments.BreakDuration.ToString());
+                    return ValueTask.CompletedTask;
+                },
+                OnHalfOpened = onHalfOpenedArguments =>
+                {
+                    Log.Warning("Circuit in a half-open state, next call is a try...");
+                    return ValueTask.CompletedTask;
+                },
+                OnClosed = onClosedArguments =>
+                {
+                    Log.Warning("Circuit reset");
+                    return ValueTask.CompletedTask;
+                }
+            });
+
+            pipelineBuilder.AddRetry<HttpResponseMessage>(new HttpRetryStrategyOptions
+            {
+                MaxRetryAttempts = 3,
+                BackoffType = DelayBackoffType.Exponential,
+                Delay = TimeSpan.FromSeconds(2),
+                OnRetry = onRetryArguments =>
+                {
+                    Log.Warning("Retry number: {AttemptNumber}", onRetryArguments.AttemptNumber);
+                    return ValueTask.CompletedTask;
+                }
+            });
+
+            pipelineBuilder.AddTimeout(TimeSpan.FromSeconds(5));
+        });
+
+    var app = builder.Build();
+
+    if (app.Environment.IsDevelopment())
     {
-        var users = await client.BrowseAsync();
-        return users;
-    })
-    .WithName("GetUsers");
+        app.MapOpenApi();
+    }
 
-app.Run();
+    app.UseHttpsRedirection();
+
+    app.MapGet("resilience/users", async (SomeServiceClient client) =>
+        {
+            var users = await client.BrowseAsync();
+            return users;
+        })
+        .WithName("GetUsers");
+
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Something went terribly wrong...");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
